@@ -15,6 +15,16 @@
 #define RST 14
 #define DIO0 26
 
+//Define a banda de sinal do radio
+
+#define BANDSIGNAL 7.8E3
+
+//Define o Preambulo
+#define PREAMB 65000
+
+//Define GAIN LNA
+#define GAIN 6
+
 //Tamanho do campo de dados
 #define TAM_DATA 200
 
@@ -38,11 +48,14 @@
     @param Dest_Add
         Endereço do destino dos equipamentos
     @param Status
-        Estado do envio do dados, 5 para pacote
-        enviado com sucesso, 1 para pacote em
-        transferência, 2 para pacote indisponível,
-        3 para pacote incompleto
-    @note Ao enviar dados, fazer a checagem de dados e 
+        Estado do envio do dados:
+            - 5 para pacote enviado com sucesso (fim do envio);
+            - 1 para pacote em transferência
+            - 2 para pacote indisponível,
+            - 3 para pacote incompleto
+            - 4 para solicitação de permissão de envio
+            - 6 para permissão para receber
+   @note Ao enviar dados, fazer a checagem de dados e 
         enviar o pacote, caso seja um pacote maior que 
         TAM_DATA sinalizar em Status que o pacote está
         em envio
@@ -50,20 +63,35 @@
 struct COM {
     uint8_t Rem_Add;
     char Data[TAM_DATA];
-    uint16_t Check_Data[16];
+    char Check_Data[16];
     uint8_t Length;
     uint8_t Dest_Add;
     uint8_t Status;
+    uint8_t ID;
 };
 
+/**
+ * 
+ * @class LORA_TTGOV2
+ * 
+ * @brief Classe de comunicação para 
+ * 
+ * */
 class Lora_TTGOV2{
     private:
+        bool receive;
         bool debug;
         uint8_t myAdd;
         bool sentPacket(COM package);
         COM receivePacket();
+        COM getClearPack();
         void LoRa_txMode();
         void LoRa_rxMode();
+        bool reqConfirm(uint8_t address);
+        COM sentConfirm(uint8_t address);
+        void generateCheck(char * data,
+                    char* check, size_t lenData,
+                    size_t lenChecks);
 
     public:
         Lora_TTGOV2(uint8_t myAdd);
@@ -73,7 +101,7 @@ class Lora_TTGOV2{
             uint8_t *byte, 
             size_t length, 
             uint8_t dest);
-        int receiveData(uint8_t * ptr);   
+        int receiveData(uint8_t * ptr);
 };
 
 #endif //LORA_TTGOV2_H
