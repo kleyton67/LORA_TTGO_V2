@@ -107,9 +107,6 @@ COM Lora_TTGOV2::receivePacket(){
 
     int packetSize = LoRa.parsePacket();
     if (packetSize) {
-        if(this->debug){
-            Serial.println("Pacote recebido!");
-        }
 
         while (LoRa.available()) {
             LoRa.readBytes(buffer, (size_t) sizeof(COM));
@@ -127,8 +124,8 @@ COM Lora_TTGOV2::receivePacket(){
             Serial.println(package.ID);
             Serial.print("Estado do pacote: ");
             Serial.println(package.Status);
-            Serial.print("Dados da conexão: ");
-            Serial.print("RSSI ");
+            Serial.println("Dados da conexão: ");
+            Serial.print("  RSSI ");
             Serial.println(LoRa.packetRssi());
             
         }
@@ -156,7 +153,7 @@ COM Lora_TTGOV2::receivePacket(){
                 16*sizeof(char));
         
         if((memcmp(hashDigest, package.Check_Data, 16*sizeof(char))!=0)
-            || !this->receive){
+            || (!this->receive && package.Status != 6)){
 
             memset(package.Data,0, sizeof(char)*TAM_DATA);
 
@@ -164,15 +161,14 @@ COM Lora_TTGOV2::receivePacket(){
             package.Length = 0;
 
             if(this->debug){
-            Serial.println("Falha no hash ou na confirmação!");
-
+                Serial.println("Falha no hash ou na confirmação!");
+                this->receive ? Serial.println("Recebendo pacote!!!!")
+                    : Serial.println("Enviando pacote!!!");
             }
         }
     }
     else{
         package.Status = 3;
-        if(this->debug){
-        }
     }
 
     return package;
@@ -296,8 +292,11 @@ bool Lora_TTGOV2::reqConfirm(uint8_t address){
 */
 COM Lora_TTGOV2::sentConfirm(uint8_t address){
     COM package;
+    COM packageData;
     
     package = this->getClearPack();
+
+    packageData = this->getClearPack();
 
     if(this->debug){
         Serial.println("Início da confirmação!!");
@@ -312,6 +311,8 @@ COM Lora_TTGOV2::sentConfirm(uint8_t address){
                 TAM_DATA*sizeof(char),
                 16*sizeof(char));
 
+    this->receive = true;
+
     while(!this->sentPacket(package)){
         if(this->debug){
             Serial.println("Tentando enviar pacote de permissão!");
@@ -319,16 +320,18 @@ COM Lora_TTGOV2::sentConfirm(uint8_t address){
         continue;
     }
 
+    delay(50);
+
+    packageData = this->receivePacket();
+
     if(this->debug){
-            Serial.print("Permissão a ");
-            Serial.println(package.Dest_Add);
-            Serial.println("Fim da confirmação.");
-            
-        }
-
-    this->receive = true;
-
-    return this->receivePacket();
+        Serial.print("Permissão a ");
+        Serial.println(package.Dest_Add);
+        Serial.println("Fim da confirmação.");
+        
+    }
+    
+    return package;
     
 }
 
@@ -408,6 +411,8 @@ bool Lora_TTGOV2::sentAll(
         //Primeiro Id é o de confirmação
         countPack++;
 
+        delay(300);
+
 
         while(!sendAll){
             
@@ -440,10 +445,13 @@ bool Lora_TTGOV2::sentAll(
             if(this->debug){
                 Serial.print("Bytes restantes: ");
                 Serial.println(package.Length);
+                Serial.print("Dados enviados: ");
+                Serial.println(package.Data);
                 Serial.print("Check: ");
                 Serial.println(package.Check_Data);
-                delay(200);
             }
+
+            delay(300);
             
             if (this->sentPacket(package)){
                 countPack++;
@@ -473,9 +481,10 @@ int Lora_TTGOV2::receiveData(uint8_t * ptr){
 
     int indexPack = 0;
 
-    package = this->receivePacket();
+    package.Status = 0;
 
     for(; package.Status!=5 ; ptr+= package.Length){
+
         package = this->receivePacket();
 
         if((package.ID != indexPack) && (package.Status == 4)){
@@ -485,20 +494,10 @@ int Lora_TTGOV2::receiveData(uint8_t * ptr){
                 Serial.print("/");
                 Serial.println(package.ID);
             }
-             return 0;
+            return 0;
         }
 
-        if(package.Status == 1 || package.Status == 5)
-        {
-            if(this->debug){
-                Serial.println("Pacote em envio...");
-            }
-            indexPack++;
-            //Término de envio do pacote
-            this->receive = false;
-        }
-
-        if(!this->receive && package.Status == 2){
+        if(this->receive && package.Status == 2){
             return 0;
         }
 
@@ -508,8 +507,23 @@ int Lora_TTGOV2::receiveData(uint8_t * ptr){
             lengthReceive += package.Length;
         }
 
+        if(package.Status == 1)
+        {
+            if(this->debug){
+                Serial.println("Pacote em envio...");
+            }
+            indexPack++;
+        }
+
         delay(10);
     }
+
+    if(this->debug){
+        Serial.println("Pacote recebido...");
+    }
+
+    this->receive = false;
+
     return lengthReceive;
 
 }
